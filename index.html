@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>番茄時鐘 PWA</title>
+
+  <!-- Bulma -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
+
+  <!-- Font Awesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ff3860">
+
+  <style>
+    :root {
+      --work-color: #ff3860; /* danger */
+      --break-color: #00d1b2; /* primary-ish */
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: white;
+      border-bottom: 1px solid #eee;
+    }
+    .topbar .level { margin: 0; padding: .5rem .75rem; }
+    .timer-circle {
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      border: 8px solid #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+      transition: border-color .2s ease;
+    }
+    .mode-work .timer-circle { border-color: var(--work-color); }
+    .mode-break .timer-circle { border-color: var(--break-color); }
+    .timer-display {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+    }
+    .sticky-info {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      padding: .6rem .8rem;
+      box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+      z-index: 5;
+    }
+    .modal-card { max-height: 90vh; }
+  </style>
+</head>
+<body class="has-background-light">
+
+  <!-- Top bar actions -->
+  <div class="topbar">
+    <div class="level">
+      <div class="level-left">
+        <h1 class="title is-5">番茄時鐘</h1>
+      </div>
+      <div class="level-right">
+        <div class="buttons">
+             <!-- Install PWA -->
+          <button id="installBtn" class="button is-small is-link is-light" style="display:none;">
+            <i class="fa-solid fa-download"></i>
+          </button>
+          <!-- 時間編輯 -->
+          <button id="openTimeBtn" class="button is-small is-light" title="編輯時間">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+          <!-- 任務管理 -->
+          <button id="openTaskListBtn" class="button is-small is-info is-light" title="任務管理">
+            <i class="fa-solid fa-list-check"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+
+  <section class="section pt-4">
+    <div class="container">
+      <div class="columns is-centered">
+        <div class="column is-12-tablet is-8-desktop">
+
+          <!-- Timer panel -->
+          <div class="box mode-work" id="timerPanel">
+            <div class="has-text-centered">
+              <h1 class="title is-4"><i class="fa-solid fa-clock"></i> 番茄時鐘</h1>
+              <p class="tag is-danger is-light is-medium" id="modeTag">
+                <i class="fa-solid fa-briefcase"></i>&nbsp;工作中
+              </p>
+            </div>
+
+            <div class="timer-circle mt-3">
+              <div class="content has-text-centered">
+                <p class="title is-1 timer-display" id="timeText">25:00</p>
+                <p class="subtitle is-6" id="loopInfo">番茄迴圈中</p>
+              </div>
+            </div>
+
+            <div class="buttons is-centered mt-4">
+              <button id="startBtn" class="button is-danger">
+                <i class="fa-solid fa-play"></i>&nbsp;開始
+              </button>
+              <button id="pauseBtn" class="button is-warning">
+                <i class="fa-solid fa-pause"></i>&nbsp;暫停
+              </button>
+              <button id="resetBtn" class="button is-light">
+                <i class="fa-solid fa-rotate-left"></i>&nbsp;重置
+              </button>
+            </div>
+          </div>
+
+          <!-- Info under timer -->
+          <div class="sticky-info">
+            <div class="level">
+              <div class="level-left">
+                <p class="has-text-weight-semibold">
+                  <i class="fa-solid fa-heading"></i>&nbsp;任務標題：
+                  <span id="currentTaskTitle">（尚未設定）</span>
+                </p>
+              </div>
+              <div class="level-right">
+                <p class="has-text-weight-semibold">
+                  <i class="fa-solid fa-seedling"></i>&nbsp;番茄數量：
+                  <span id="currentTomatoes">0</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sessions history -->
+          <div class="box mt-4">
+            <h2 class="subtitle is-6"><i class="fa-solid fa-clock-rotate-left"></i> 歷史紀錄</h2>
+            <div id="historyList" class="content">
+              <p class="has-text-grey">尚無紀錄。</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Time edit modal -->
+  <div id="timeModal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title"><i class="fa-solid fa-sliders"></i>&nbsp;時間設定</p>
+        <button class="delete" id="closeTimeBtn" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="columns">
+          <div class="column">
+            <label class="label">工作（分鐘）</label>
+            <div class="field has-addons">
+              <p class="control">
+                <a class="button is-light" id="workDec"><i class="fa-solid fa-minus"></i></a>
+              </p>
+              <p class="control is-expanded">
+                <input id="workMinutes" class="input has-text-centered" type="number" min="1" value="25">
+              </p>
+              <p class="control">
+                <a class="button is-light" id="workInc"><i class="fa-solid fa-plus"></i></a>
+              </p>
+            </div>
+          </div>
+          <div class="column">
+            <label class="label">休息（分鐘）</label>
+            <div class="field has-addons">
+              <p class="control">
+                <a class="button is-light" id="breakDec"><i class="fa-solid fa-minus"></i></a>
+              </p>
+              <p class="control is-expanded">
+                <input id="breakMinutes" class="input has-text-centered" type="number" min="1" value="5">
+              </p>
+              <p class="control">
+                <a class="button is-light" id="breakInc"><i class="fa-solid fa-plus"></i></a>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="help">修改數值會在計時未運行時同步到顯示。</p>
+      </section>
+      <footer class="modal-card-foot">
+        <button class="button is-primary" id="saveTimeBtn">
+          <i class="fa-solid fa-floppy-disk"></i>&nbsp;儲存
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Task management modal (list + detail + edit) -->
+  <div id="taskModal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title"><i class="fa-solid fa-list-check"></i>&nbsp;任務管理</p>
+        <button class="delete" id="closeTaskModalBtn" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <!-- Tabs -->
+        <div class="tabs is-toggle is-fullwidth">
+          <ul>
+            <li class="is-active" data-tab="list"><a><span class="icon"><i class="fa-solid fa-list"></i></span><span>清單</span></a></li>
+            <li data-tab="detail"><a><span class="icon"><i class="fa-solid fa-file-lines"></i></span><span>詳情</span></a></li>
+            <li data-tab="new"><a><span class="icon"><i class="fa-solid fa-plus"></i></span><span>新增</span></a></li>
+          </ul>
+        </div>
+
+        <!-- List tab -->
+        <div id="tab-list">
+          <div id="taskList" class="content">
+            <p class="has-text-grey">尚無任務。</p>
+          </div>
+        </div>
+
+        <!-- Detail tab -->
+        <div id="tab-detail" style="display:none;">
+          <form id="detailForm" class="box">
+            <div class="field">
+              <label class="label">任務標題</label>
+              <input id="detTitle" class="input" type="text" placeholder="標題" />
+            </div>
+            <div class="field">
+              <label class="label">任務描述</label>
+              <textarea id="detDesc" class="textarea" rows="2" placeholder="描述"></textarea>
+            </div>
+            <div class="field">
+              <label class="label">優先順序</label>
+              <div class="select is-fullwidth">
+                <select id="detPri">
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">任務分類</label>
+              <input id="detCat" class="input" type="text" placeholder="類型" />
+            </div>
+            <div class="field is-horizontal">
+              <div class="field-body">
+                <div class="field">
+                  <label class="label">工作（分鐘）</label>
+                  <input id="detWork" class="input" type="number" min="1" />
+                </div>
+                <div class="field">
+                  <label class="label">休息（分鐘）</label>
+                  <input id="detBreak" class="input" type="number" min="1" />
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">番茄數量</label>
+              <input id="detTomato" class="input" type="number" min="0" disabled />
+            </div>
+            <div id="detStatus" class="mb-3"></div>
+            <div class="buttons">
+              <button id="selectTaskBtn" type="button" class="button is-info" disabled>
+                <i class="fa-solid fa-check"></i>&nbsp;設為目前任務
+              </button>
+              <button id="saveTaskBtn" type="submit" class="button is-primary" disabled>
+                <i class="fa-solid fa-floppy-disk"></i>&nbsp;儲存修改
+              </button>
+              <button id="markDoneBtn" type="button" class="button is-success is-light" disabled>
+                <i class="fa-solid fa-check-double"></i>&nbsp;標記完成
+              </button>
+              <button id="deleteTaskBtn" type="button" class="button is-danger is-light" disabled>
+                <i class="fa-solid fa-trash"></i>&nbsp;刪除
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- New tab -->
+        <div id="tab-new" style="display:none;">
+          <div class="box">
+            <div class="field">
+              <label class="label">任務標題</label>
+              <input id="newTitle" class="input" type="text" placeholder="例如：整理報告">
+            </div>
+            <div class="field">
+              <label class="label">任務描述</label>
+              <textarea id="newDesc" class="textarea" rows="2" placeholder="補充說明"></textarea>
+            </div>
+            <div class="field">
+              <label class="label">任務分類</label>
+              <input id="newCat" class="input" type="text" placeholder="例如：工作/學習/家務">
+            </div>
+            <div class="field">
+              <label class="label">優先順序</label>
+              <div class="select is-fullwidth">
+                <select id="newPri">
+                  <option value="Low">Low</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+            </div>
+            <div class="field is-horizontal">
+              <div class="field-body">
+                <div class="field">
+                  <label class="label">工作（分鐘）</label>
+                  <input id="newWork" class="input" type="number" min="1" value="25">
+                </div>
+                <div class="field">
+                  <label class="label">休息（分鐘）</label>
+                  <input id="newBreak" class="input" type="number" min="1" value="5">
+                </div>
+              </div>
+            </div>
+            <div class="buttons">
+              <button id="createTaskBtn" class="button is-primary">
+                <i class="fa-solid fa-plus"></i>&nbsp;建立
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Sound modal -->
+  <div id="soundModal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title" id="soundTitle"><i class="fa-solid fa-bell"></i>&nbsp;提醒</p>
+        <button class="delete" id="closeSoundBtn" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <p id="soundMessage">提醒音效播放中（1 分鐘循環）。</p>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="stopSoundBtn" class="button is-info">
+          <i class="fa-solid fa-bell-slash"></i>&nbsp;關閉聲音
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Local audio -->
+  <audio id="bellWork" src="assets/audio/下課音樂.mp3" preload="auto"></audio>
+  <audio id="bellBreak" src="assets/audio/上課提醒.mp3" preload="auto"></audio>
+
+  <script>
+    // ---------------------------
+    // PWA install prompt
+    // ---------------------------
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('installBtn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = 'inline-flex';
+    });
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.style.display = 'none';
+    });
+
+    // ---------------------------
+    // SW registration
+    // ---------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+    }
+
+    // ---------------------------
+    // IndexedDB
+    // tasks: {id, title, category, description, priority, tomatoes, workMinutes, breakMinutes, completed, completedDate}
+    // sessions: {id, taskId, workMinutes, breakMinutes, tomatoesSnapshot, createdAt}
+    // ---------------------------
+    const DB_NAME = 'pomodoroDB';
+    const DB_VERSION = 3;
+    const STORE_TASKS = 'tasks';
+    const STORE_SESSIONS = 'sessions';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_TASKS)) {
+            const tasks = db.createObjectStore(STORE_TASKS, { keyPath: 'id', autoIncrement: true });
+            tasks.createIndex('title', 'title', { unique: false });
+            tasks.createIndex('completed', 'completed', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(STORE_SESSIONS)) {
+            const sessions = db.createObjectStore(STORE_SESSIONS, { keyPath: 'id', autoIncrement: true });
+            sessions.createIndex('taskId', 'taskId', { unique: false });
+            sessions.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function addTask(task) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_TASKS, 'readwrite');
+        const store = tx.objectStore(STORE_TASKS);
+        const req = store.add(task);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function updateTask(task) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_TASKS, 'readwrite');
+        const store = tx.objectStore(STORE_TASKS);
+        const req = store.put(task);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function deleteTask(id) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_TASKS, 'readwrite');
+        const store = tx.objectStore(STORE_TASKS);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function listTasks() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_TASKS, 'readonly');
+        const store = tx.objectStore(STORE_TASKS);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => (b.id - a.id)));
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function addSession(session) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_SESSIONS, 'readwrite');
+        const store = tx.objectStore(STORE_SESSIONS);
+        const req = store.add(session);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function listSessions() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_SESSIONS, 'readonly');
+        const store = tx.objectStore(STORE_SESSIONS);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // ---------------------------
+    // Elements
+    // ---------------------------
+    const timerPanel = document.getElementById('timerPanel');
+    const timeText = document.getElementById('timeText');
+    const modeTag = document.getElementById('modeTag');
+    const loopInfo = document.getElementById('loopInfo');
+
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const currentTaskTitle = document.getElementById('currentTaskTitle');
+    const currentTomatoes = document.getElementById('currentTomatoes');
+
+    const openTimeBtn = document.getElementById('openTimeBtn');
+    const timeModal = document.getElementById('timeModal');
+    const closeTimeBtn = document.getElementById('closeTimeBtn');
+
+    const workInput = document.getElementById('workMinutes');
+    const breakInput = document.getElementById('breakMinutes');
+    const workInc = document.getElementById('workInc');
+    const workDec = document.getElementById('workDec');
+    const breakInc = document.getElementById('breakInc');
+    const breakDec = document.getElementById('breakDec');
+    const saveTimeBtn = document.getElementById('saveTimeBtn');
+
+    const taskModal = document.getElementById('taskModal');
+    const openTaskListBtn = document.getElementById('openTaskListBtn');
+    const closeTaskModalBtn = document.getElementById('closeTaskModalBtn');
+
+    const tabs = taskModal.querySelectorAll('.tabs li');
+    const tabList = document.getElementById('tab-list');
+    const tabDetail = document.getElementById('tab-detail');
+    const tabNew = document.getElementById('tab-new');
+
+    const taskList = document.getElementById('taskList');
+
+    // Detail form elements
+    const detailForm = document.getElementById('detailForm');
+    const detTitle = document.getElementById('detTitle');
+    const detDesc = document.getElementById('detDesc');
+    const detPri = document.getElementById('detPri');
+    const detCat = document.getElementById('detCat');
+    const detWork = document.getElementById('detWork');
+    const detBreak = document.getElementById('detBreak');
+    const detTomato = document.getElementById('detTomato');
+    const detStatus = document.getElementById('detStatus');
+
+    const selectTaskBtn = document.getElementById('selectTaskBtn');
+    const saveTaskBtn = document.getElementById('saveTaskBtn');
+    const markDoneBtn = document.getElementById('markDoneBtn');
+    const deleteTaskBtn = document.getElementById('deleteTaskBtn');
+
+    // New form
+    const newTitle = document.getElementById('newTitle');
+    const newDesc = document.getElementById('newDesc');
+    const newCat = document.getElementById('newCat');
+    const newPri = document.getElementById('newPri');
+    const newWork = document.getElementById('newWork');
+    const newBreak = document.getElementById('newBreak');
+    const createTaskBtn = document.getElementById('createTaskBtn');
+
+    // Sound modal + audio
+    const soundModal = document.getElementById('soundModal');
+    const soundTitle = document.getElementById('soundTitle');
+    const soundMessage = document.getElementById('soundMessage');
+    const stopSoundBtn = document.getElementById('stopSoundBtn');
+    const closeSoundBtn = document.getElementById('closeSoundBtn');
+    const bellWork = document.getElementById('bellWork');
+    const bellBreak = document.getElementById('bellBreak');
+
+    // ---------------------------
+    // App state
+    // ---------------------------
+    let state = {
+      mode: 'work',               // 'work' | 'break'
+      remainingSec: 25 * 60,
+      running: false,
+      currentTask: null,          // task object
+      tomatoes: 0,                // current task tomatoes in this session
+      selectedTaskId: null,
+      soundTimeout: null,
+      playingAudio: null          // HTMLAudioElement currently playing
+    };
+    let tickInterval = null;
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      timerPanel.classList.toggle('mode-work', mode === 'work');
+      timerPanel.classList.toggle('mode-break', mode === 'break');
+      if (mode === 'work') {
+        modeTag.className = 'tag is-danger is-light is-medium';
+        modeTag.innerHTML = '<i class="fa-solid fa-briefcase"></i>&nbsp;工作中';
+        state.remainingSec = Math.max(1, Number(workInput.value)) * 60;
+      } else {
+        modeTag.className = 'tag is-primary is-light is-medium';
+        modeTag.innerHTML = '<i class="fa-solid fa-mug-hot"></i>&nbsp;休息中';
+        state.remainingSec = Math.max(1, Number(breakInput.value)) * 60;
+      }
+      timeText.textContent = formatTime(state.remainingSec);
+    }
+
+    function startTimer() {
+      if (state.running) return;
+      state.running = true;
+      clearInterval(tickInterval);
+      let last = Date.now();
+      tickInterval = setInterval(() => {
+        const now = Date.now();
+        const delta = Math.floor((now - last) / 1000);
+        if (delta >= 1) {
+          state.remainingSec = Math.max(0, state.remainingSec - delta);
+          last = now;
+          timeText.textContent = formatTime(state.remainingSec);
+          if (state.remainingSec <= 0) handlePhaseComplete();
+        }
+      }, 250);
+    }
+
+    function pauseTimer() {
+      state.running = false;
+      clearInterval(tickInterval);
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      stopSound();
+      setMode('work');
+      state.tomatoes = state.currentTask ? (state.currentTask.tomatoes || 0) : 0;
+      updateHeader();
+    }
+
+    async function handlePhaseComplete() {
+      pauseTimer();
+      if (state.mode === 'work') {
+        // count tomato
+        state.tomatoes += 1;
+        currentTomatoes.textContent = String(state.tomatoes);
+        if (state.currentTask) {
+          state.currentTask.tomatoes = (state.currentTask.tomatoes || 0) + 1;
+          await updateTask(state.currentTask);
+          await addSession({
+            taskId: state.currentTask.id,
+            workMinutes: Math.max(1, Number(workInput.value)),
+            breakMinutes: Math.max(1, Number(breakInput.value)),
+            tomatoesSnapshot: state.currentTask.tomatoes,
+            createdAt: new Date().toISOString()
+          });
+        } else {
+          await addSession({
+            taskId: null,
+            workMinutes: Math.max(1, Number(workInput.value)),
+            breakMinutes: Math.max(1, Number(breakInput.value)),
+            tomatoesSnapshot: state.tomatoes,
+            createdAt: new Date().toISOString()
+          });
+        }
+        renderHistory();
+        // Sound: class over
+        playSound('work');
+        // auto switch to break
+        setMode('break');
+        startTimer();
+      } else {
+        // Sound: class start
+        playSound('break');
+        // break over -> back to work
+        setMode('work');
+        startTimer();
+      }
+    }
+
+    // ---------------------------
+    // Sound control with local mp3 (loop for 60s)
+    // ---------------------------
+    function openModal(el) { el.classList.add('is-active'); }
+    function closeModal(el) { el.classList.remove('is-active'); }
+
+    function playSound(kind) {
+      stopSound();
+      const audio = kind === 'work' ? bellWork : bellBreak;
+      state.playingAudio = audio;
+      audio.currentTime = 0;
+      audio.loop = true;
+      // Show modal
+      soundTitle.innerHTML = kind === 'work'
+        ? '<i class="fa-solid fa-bell"></i>&nbsp;下課提醒'
+        : '<i class="fa-solid fa-bell"></i>&nbsp;上課提醒';
+      soundMessage.textContent = '提醒音效播放中（1 分鐘循環）。';
+      openModal(soundModal);
+
+      // Try play (user gesture required on some platforms; this modal appears after interaction)
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch(() => {
+          // If autoplay blocked, user can press stop or close; keep modal visible
+        });
+      }
+      // Stop after 60 seconds
+      state.soundTimeout = setTimeout(stopSound, 60 * 1000);
+    }
+
+    function stopSound() {
+      if (state.soundTimeout) {
+        clearTimeout(state.soundTimeout);
+        state.soundTimeout = null;
+      }
+      if (state.playingAudio) {
+        try {
+          state.playingAudio.pause();
+          state.playingAudio.currentTime = 0;
+          state.playingAudio.loop = false;
+        } catch {}
+        state.playingAudio = null;
+      }
+      closeModal(soundModal);
+    }
+
+    stopSoundBtn.addEventListener('click', stopSound);
+    closeSoundBtn.addEventListener('click', stopSound);
+    soundModal.querySelector('.modal-background').addEventListener('click', stopSound);
+
+    // ---------------------------
+    // Header sync
+    // ---------------------------
+    function updateHeader() {
+      currentTaskTitle.textContent = state.currentTask ? state.currentTask.title : '（尚未設定）';
+      currentTomatoes.textContent = String(state.currentTask ? (state.currentTask.tomatoes || 0) : state.tomatoes);
+      // If current task has custom work/break, reflect to inputs
+      if (state.currentTask) {
+        if (Number.isFinite(state.currentTask.workMinutes)) workInput.value = state.currentTask.workMinutes;
+        if (Number.isFinite(state.currentTask.breakMinutes)) breakInput.value = state.currentTask.breakMinutes;
+        if (!state.running) timeText.textContent =
+          formatTime((state.mode === 'work' ? state.currentTask.workMinutes : state.currentTask.breakMinutes) * 60);
+      }
+    }
+
+    // ---------------------------
+    // Time modal handlers
+    // ---------------------------
+    openTimeBtn.addEventListener('click', () => openModal(timeModal));
+    closeTimeBtn.addEventListener('click', () => closeModal(timeModal));
+    timeModal.querySelector('.modal-background').addEventListener('click', () => closeModal(timeModal));
+
+    workInc.addEventListener('click', () => {
+      workInput.value = String(Math.max(1, Number(workInput.value) + 1));
+      if (state.mode === 'work' && !state.running) timeText.textContent = formatTime(Number(workInput.value) * 60);
+    });
+    workDec.addEventListener('click', () => {
+      workInput.value = String(Math.max(1, Number(workInput.value) - 1));
+      if (state.mode === 'work' && !state.running) timeText.textContent = formatTime(Number(workInput.value) * 60);
+    });
+    breakInc.addEventListener('click', () => {
+      breakInput.value = String(Math.max(1, Number(breakInput.value) + 1));
+      if (state.mode === 'break' && !state.running) timeText.textContent = formatTime(Number(breakInput.value) * 60);
+    });
+    breakDec.addEventListener('click', () => {
+      breakInput.value = String(Math.max(1, Number(breakInput.value) - 1));
+      if (state.mode === 'break' && !state.running) timeText.textContent = formatTime(Number(breakInput.value) * 60);
+    });
+
+    saveTimeBtn.addEventListener('click', async () => {
+      loopInfo.textContent = '時間設定已儲存';
+      setTimeout(() => loopInfo.textContent = '番茄迴圈中', 1500);
+      // If current task selected and not completed, persist task-specific durations
+      if (state.currentTask && !state.currentTask.completed) {
+        state.currentTask.workMinutes = Math.max(1, Number(workInput.value));
+        state.currentTask.breakMinutes = Math.max(1, Number(breakInput.value));
+        await updateTask(state.currentTask);
+      }
+      closeModal(timeModal);
+      if (!state.running) {
+        const v = state.mode === 'work' ? Number(workInput.value) : Number(breakInput.value);
+        timeText.textContent = formatTime(v * 60);
+      }
+    });
+
+    // ---------------------------
+    // Task modal + tabs
+    // ---------------------------
+    openTaskListBtn.addEventListener('click', async () => {
+      await refreshTaskList();
+      switchTab('list');
+      openModal(taskModal);
+    });
+    closeTaskModalBtn.addEventListener('click', () => closeModal(taskModal));
+    taskModal.querySelector('.modal-background').addEventListener('click', () => closeModal(taskModal));
+
+    tabs.forEach(li => {
+      li.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('is-active'));
+        li.classList.add('is-active');
+        const which = li.getAttribute('data-tab');
+        switchTab(which);
+      });
+    });
+
+    function switchTab(which) {
+      tabList.style.display = which === 'list' ? '' : 'none';
+      tabDetail.style.display = which === 'detail' ? '' : 'none';
+      tabNew.style.display = which === 'new' ? '' : 'none';
+    }
+
+    async function refreshTaskList() {
+      const rows = await listTasks();
+      if (!rows.length) {
+        taskList.innerHTML = '<p class="has-text-grey">尚無任務。</p>';
+        populateDetail(null);
+        return;
+      }
+      const html = rows.map(r => `
+        <div class="media task-row" data-id="${r.id}">
+          <div class="media-left">
+            <span class="icon has-text-info"><i class="fa-solid fa-list-check"></i></span>
+          </div>
+          <div class="media-content">
+            <p class="is-size-6 has-text-weight-semibold">${escapeHTML(r.title)}</p>
+            <p class="is-size-7 has-text-grey">
+              優先：${escapeHTML(r.priority || '-')}｜類型：${escapeHTML(r.category || '-')}
+            </p>
+          </div>
+          <div class="media-right">
+            ${r.completed ? '<span class="tag is-success is-light"><i class="fa-solid fa-check"></i>&nbsp;完成</span>' : ''}
+          </div>
+        </div>
+        <hr class="my-2">
+      `).join('');
+      taskList.innerHTML = html;
+
+      taskList.querySelectorAll('.task-row').forEach(el => {
+        el.addEventListener('click', async () => {
+          const id = Number(el.getAttribute('data-id'));
+          const tasks = await listTasks();
+          const task = tasks.find(t => t.id === id);
+          populateDetail(task);
+          tabs.forEach(t => t.classList.remove('is-active'));
+          tabs.forEach(t => { if (t.getAttribute('data-tab') === 'detail') t.classList.add('is-active'); });
+          switchTab('detail');
+        });
+      });
+    }
+
+    function populateDetail(task) {
+      state.selectedTaskId = task ? task.id : null;
+      detTitle.value = task ? task.title || '' : '';
+      detDesc.value = task ? task.description || '' : '';
+      detPri.value = task ? (task.priority || 'Medium') : 'Medium';
+      detCat.value = task ? task.category || '' : '';
+      detWork.value = task ? (task.workMinutes ?? 25) : '';
+      detBreak.value = task ? (task.breakMinutes ?? 5) : '';
+      detTomato.value = task ? (task.tomatoes || 0) : 0;
+
+      if (!task) {
+        detStatus.innerHTML = '<p class="has-text-grey">尚未選擇任務。</p>';
+        selectTaskBtn.disabled = true;
+        saveTaskBtn.disabled = true;
+        markDoneBtn.disabled = true;
+        deleteTaskBtn.disabled = true;
+        return;
+      }
+      const statusText = task.completed
+        ? `<span class="tag is-success is-light"><i class="fa-solid fa-check"></i>&nbsp;已完成</span>
+           <p class="is-size-7 mt-2">完成時間：${new Date(task.completedDate).toLocaleString()}</p>`
+        : `<span class="tag is-warning is-light"><i class="fa-solid fa-hourglass-half"></i>&nbsp;未完成，可修改</span>`;
+      detStatus.innerHTML = statusText;
+
+      selectTaskBtn.disabled = false;
+      deleteTaskBtn.disabled = false;
+      markDoneBtn.disabled = !!task.completed;
+      saveTaskBtn.disabled = !!task.completed;
+    }
+
+    selectTaskBtn.addEventListener('click', async () => {
+      if (!state.selectedTaskId) return;
+      const tasks = await listTasks();
+      const task = tasks.find(t => t.id === state.selectedTaskId);
+      state.currentTask = task;
+      state.tomatoes = task.tomatoes || 0;
+      // Apply task-specific durations
+      if (Number.isFinite(task.workMinutes)) workInput.value = task.workMinutes;
+      if (Number.isFinite(task.breakMinutes)) breakInput.value = task.breakMinutes;
+      updateHeader();
+      loopInfo.textContent = '已選擇目前任務';
+      setTimeout(() => loopInfo.textContent = '番茄迴圈中', 1500);
+      closeModal(taskModal);
+    });
+
+    detailForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!state.selectedTaskId) return;
+      const tasks = await listTasks();
+      const task = tasks.find(t => t.id === state.selectedTaskId);
+      if (!task || task.completed) return;
+      task.title = detTitle.value.trim() || '(未命名)';
+      task.description = detDesc.value.trim();
+      task.priority = detPri.value;
+      task.category = detCat.value.trim();
+      task.workMinutes = Math.max(1, Number(detWork.value || 25));
+      task.breakMinutes = Math.max(1, Number(detBreak.value || 5));
+      await updateTask(task);
+      if (state.currentTask && state.currentTask.id === task.id) {
+        state.currentTask = task;
+        updateHeader();
+      }
+      populateDetail(task);
+      await refreshTaskList();
+    });
+
+    markDoneBtn.addEventListener('click', async () => {
+      if (!state.selectedTaskId) return;
+      const tasks = await listTasks();
+      const task = tasks.find(t => t.id === state.selectedTaskId);
+      task.completed = true;
+      task.completedDate = new Date().toISOString();
+      await updateTask(task);
+      populateDetail(task);
+      await refreshTaskList();
+      if (state.currentTask && state.currentTask.id === task.id) {
+        state.currentTask = task;
+        updateHeader();
+      }
+    });
+
+    deleteTaskBtn.addEventListener('click', async () => {
+      if (!state.selectedTaskId) return;
+      await deleteTask(state.selectedTaskId);
+      state.selectedTaskId = null;
+      populateDetail(null);
+      await refreshTaskList();
+    });
+
+    createTaskBtn.addEventListener('click', async () => {
+      const title = newTitle.value.trim();
+      if (!title) { alert('請輸入任務標題'); return; }
+      const task = {
+        title,
+        description: newDesc.value.trim(),
+        category: newCat.value.trim(),
+        priority: newPri.value,
+        workMinutes: Math.max(1, Number(newWork.value || 25)),
+        breakMinutes: Math.max(1, Number(newBreak.value || 5)),
+        tomatoes: 0,
+        completed: false,
+        completedDate: null
+      };
+      const id = await addTask(task);
+      newTitle.value = ''; newDesc.value = ''; newCat.value = ''; newPri.value = 'Medium';
+      newWork.value = '25'; newBreak.value = '5';
+      await refreshTaskList();
+      const tasks = await listTasks();
+      const created = tasks.find(t => t.id === id);
+      populateDetail(created);
+      tabs.forEach(t => t.classList.remove('is-active'));
+      tabs.forEach(t => { if (t.getAttribute('data-tab') === 'detail') t.classList.add('is-active'); });
+      switchTab('detail');
+    });
+
+    // ---------------------------
+    // History rendering (sessions)
+    // ---------------------------
+    async function renderHistory() {
+      const rows = await listSessions();
+      if (!rows.length) {
+        historyList.innerHTML = '<p class="has-text-grey">尚無紀錄。</p>';
+        return;
+      }
+      const html = rows.map(r => `
+        <div class="media">
+          <div class="media-left">
+            <span class="icon has-text-danger"><i class="fa-solid fa-seedling"></i></span>
+          </div>
+          <div class="media-content">
+            <p class="is-size-6 has-text-weight-semibold">${r.taskId ? '任務 #' + r.taskId : '未綁定任務'}</p>
+            <p class="is-size-7 has-text-grey">
+              工作 ${r.workMinutes} 分｜休息 ${r.breakMinutes} 分｜番茄快照：${r.tomatoesSnapshot}
+            </p>
+            <p class="is-size-7">時間：${new Date(r.createdAt).toLocaleString()}</p>
+          </div>
+        </div>
+        <hr class="my-2">
+      `).join('');
+      historyList.innerHTML = html;
+    }
+
+    // ---------------------------
+    // Controls
+    // ---------------------------
+    startBtn.addEventListener('click', startTimer);
+    pauseBtn.addEventListener('click', pauseTimer);
+    resetBtn.addEventListener('click', () => {
+      resetTimer();
+      renderHistory();
+    });
+
+
+// 儲存時間設定
+saveTimeBtn.addEventListener('click', async () => {
+  // 更新任務的工作/休息時間
+  if (state.currentTask && !state.currentTask.completed) {
+    state.currentTask.workMinutes = Math.max(1, Number(workInput.value));
+    state.currentTask.breakMinutes = Math.max(1, Number(breakInput.value));
+    await updateTask(state.currentTask);
+  }
+  closeModal(timeModal);
+  resetTimer();   // <-- 重置畫面
+});
+
+// 儲存任務修改
+detailForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.selectedTaskId) return;
+  const tasks = await listTasks();
+  const task = tasks.find(t => t.id === state.selectedTaskId);
+  if (!task || task.completed) return;
+  task.title = detTitle.value.trim() || '(未命名)';
+  task.description = detDesc.value.trim();
+  task.priority = detPri.value;
+  task.category = detCat.value.trim();
+  task.workMinutes = Math.max(1, Number(detWork.value || 25));
+  task.breakMinutes = Math.max(1, Number(detBreak.value || 5));
+  await updateTask(task);
+  resetTimer();   // <-- 重置畫面
+});
+
+    // ---------------------------
+    // Init
+    // ---------------------------
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+    setMode('work');
+    updateHeader();
+    renderHistory();
+  </script>
+</body>
+</html>
